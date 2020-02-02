@@ -1,10 +1,12 @@
 #!/bin/bash
 
+logfile=/tmp/perf-test-script-$(date +"%Y%m%dT%H%M%S%z").log
+confdlogfile=/tmp/perf-test-confd-$(date +"%Y%m%dT%H%M%S%z").log
+
 CURLOPT=-f
 location="RibbonLab"
 #appType="sbc"
 #sbcType="isbc"
-jsonFile="/tmp/data.json"
 
 function printUsage()
 {
@@ -18,7 +20,6 @@ function printSeparator()
 
 function parseCmdlineArgs()
 {
-    logfile=/tmp/perf-test.log
 
     stealThreshold=3
     tgTestCount=0
@@ -65,8 +66,6 @@ function parseCmdlineArgs()
         esac
         shift
     done
-
-    echo "user=$user, password=$password, count=$tgTestCount, steal_threshold=$stealThreshold"
 
     if [[ -z $password ]]; then
         read -p "password Enter CLI password for user $user: " password
@@ -144,6 +143,9 @@ function sbx_config_perf_test()
         exit 1;
     fi
 
+    tail -F -n 3 /opt/sonus/sbx/tailf/var/confd/log/devel.log 2>/dev/null > $confdlogfile &
+    tailpid=$!
+
     OUT=$(curl $CURLOPT -ksu "$user:$password" -XPUT  -H 'Content-Type: application/vnd.yang.data+xml'  https://localhost/api/config/addressContext/default/ipInterfaceGroup/TEST_LIG_1 -d "
     <ipInterfaceGroup>
          <name>TEST_LIG_1</name>
@@ -208,15 +210,8 @@ function sbx_config_perf_test()
     avgTgModifyTime=$(myexpr "$TG_UPDATE_TIME/$tgTestCount")
     avgTgDeleteTime=$(myexpr "$TG_DEL_TIME/$tgTestCount") 
 
-cat > $jsonFile << EOF
-	"cfgPerfStats" : {
-		"tgTestCount"     : "$tgTestCount",
-		"avgTgCreateTime" : "$avgTgCreateTime",
-		"avgTgModifyTime" : "$avgTgModifyTime",
-		"avgTgDeleteTime" : "$avgTgDeleteTime"
-	}
-}
-EOF
+    kill -9 "$tailpid" >& /dev/null
+    wait "$tailpid" >& /dev/null
 
 }
 
@@ -273,20 +268,22 @@ function main()
 {
     parseCmdlineArgs "$@"
 
-    sbx_config_perf_test                        |& tee    $logfile
+    sbx_config_perf_test                        
 
-    steal_check                                 |& tee -a $logfile
+    steal_check                                 
 
-    disk_perf_test                              |& tee -a $logfile
+    disk_perf_test                              
 
-    fetch_sbx_start_time                        |& tee -a $logfile
+    fetch_sbx_start_time                        
 
-    printSeparator                              |& tee -a $logfile
+    printSeparator                              
 
-    fetch_system_info                           |& tee -a $logfile
+    fetch_system_info                           
 
-    echo "Time taken to test $SECONDS seconds"  |& tee -a $logfile
+    echo "Test Time       : $SECONDS seconds"  
+    echo "Log Files       : $logfile"
+    echo "                : $confdlogfile"
 
 }
 
-main "$@"
+main "$@" | tee $logfile
