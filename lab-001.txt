@@ -1,0 +1,39 @@
+[root@ppsbc1-vsbc1 10.0.1.15 external]#  ./perf-test.sh -u admin -p admin -c 100
+---------------------------------------------------------------------------------------------------
+         Configuration Performance Test with REST API
+---------------------------------------------------------------------------------------------------
+TYPE            COUNT           CREATE_TIME     UPDATE_TIME     DELETE_TIME
+TG              100             170             50              38
+TG              1               1.7             0.5             0.38
+---------------------------------------------------------------------------------------------------
+         Steal was never greater than 3
+---------------------------------------------------------------------------------------------------
+/dev/vda:
+ Timing cached reads:   16136 MB in  1.99 seconds = 8111.01 MB/sec
+ Timing buffered disk reads: 882 MB in  3.02 seconds = 292.18 MB/sec
+/dev/vda1:
+ Timing cached reads:   16164 MB in  1.99 seconds = 8129.73 MB/sec
+ Timing buffered disk reads: 190 MB in  1.05 seconds = 181.72 MB/sec
+/dev/vda5:
+ Timing cached reads:   16290 MB in  1.99 seconds = 8188.33 MB/sec
+ Timing buffered disk reads: 612 MB in  0.23 seconds = 2624.54 MB/sec
+/dev/vda6:
+ Timing cached reads:   16314 MB in  1.99 seconds = 8202.46 MB/sec
+ Timing buffered disk reads: 154 MB in  3.03 seconds =  50.83 MB/sec
+/dev/vda7:
+ Timing cached reads:   16850 MB in  1.99 seconds = 8479.48 MB/sec
+ Timing buffered disk reads: 256 MB in  3.03 seconds =  84.45 MB/sec
+---------------------------------------------------------------------------------------------------
+                           SBX START TIME
+---------------------------------------------------------------------------------------------------
+Dir                                                                          Role           Time
+/var/log/sonus/sbx//asp_saved_logs/normal/log_CE_Node2_2020_01_27_05_46_08/  Active         96s
+/var/log/sonus/sbx//asp_saved_logs/normal/log_CE_Node2_2020_01_30_02_08_19/  Active         90s
+/var/log/sonus/sbx//openclovis/                                              Active         80s
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
+appType         : sbc
+sbcType         : isbc
+cpu             : 4
+memory          : 10237248
+Time taken to test 331 seconds
