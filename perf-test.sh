@@ -159,7 +159,7 @@ function sbx_config_perf_test()
         OUT=$(curl $CURLOPT -ksu "$user:$password" -XPOST  -H 'Content-Type: application/vnd.yang.data+xml'  https://localhost/api/config/addressContext/default/zone/defaultSigZone -d "
         <sipTrunkGroup>
              <name>TEST_TG_$i</name>
-                 <state>enabled</state>
+                 <state>disabled</state>
              <media>
              <mediaIpInterfaceGroupName>TEST_LIG_1</mediaIpInterfaceGroupName>
              </media>
@@ -172,13 +172,14 @@ function sbx_config_perf_test()
     stop=$(date +%s)
     TG_CREATE_TIME=$((stop-start))
 
+    #------------------------------------------------------------------------------------------------------------------------#
+
     start=$(date +%s)
 
     for (( i=0; i<$tgTestCount; i++)); do
         OUT=$(curl $CURLOPT -ksu "$user:$password" -XPATCH  -H 'Content-Type: application/vnd.yang.data+xml'  https://localhost/api/config/addressContext/default/zone/defaultSigZone/sipTrunkGroup/TEST_TG_$i  -d "
         <sipTrunkGroup>
              <name>TEST_TG_$i</name>
-                 <state>disabled</state>
              <sipResponseCodeStats>enabled</sipResponseCodeStats>
         </sipTrunkGroup>
         ")
@@ -188,6 +189,8 @@ function sbx_config_perf_test()
 
     stop=$(date +%s)
     TG_UPDATE_TIME=$((stop-start))
+
+    #------------------------------------------------------------------------------------------------------------------------#
 
     start=$(date +%s)
 
