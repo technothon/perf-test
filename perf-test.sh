@@ -23,7 +23,7 @@ function parseCmdlineArgs()
 
     stealThreshold=3
     tgTestCount=0
-    options=$(getopt -o "du:p:c:s:l:" -- "$@")
+    options=$(getopt -o "du:p:c:s:l:" -l "tgUpdateFile:,tgUpdateCount:" -- "$@")
 
     if [ $? -ne 0 ]; then  
         printUsage
@@ -48,6 +48,14 @@ function parseCmdlineArgs()
                 ;;
             -s|--steal)
                 stealThreshold=$2
+                shift;
+                ;;
+            --tgUpdateFile)
+                tgUpdateFile=$2
+                shift;
+                ;;
+            --tgUpdateCount)
+                tgUpdateCount=$2
                 shift;
                 ;;
             -l|--log)
@@ -128,6 +136,105 @@ function fetch_sbx_start_time()
     done
 }
 
+function updateTgWithCli()
+{
+    local file=/tmp/cli-update.tmp
+    > $file
+
+    echo configure >> $file
+    for (( i=0; i<$tgTestCount; i++)); do
+            cat "$tgUpdateFile" | sed -nE "s/.*sipTrunkGroup\s+\S+/set addressContext default zone defaultSigZone sipTrunkGroup TEST_TG_$i /p"  >> $file
+            
+            if [[ $(( (i+1) % tgUpdateCount )) -eq 0 ]]; then
+                echo commit >> $file
+            fi
+		set +x
+    done;
+    echo commit >> $file
+
+    cp $file /home/sftproot/Administrator/admin/ 
+    chmod 777 /home/sftproot/Administrator/admin/$(basename $file)
+
+    cd  /home/sftproot/Administrator/admin/
+    (echo source $(basename $file)) | /opt/sonus/sbx/tailf/bin/confd_cli -u admin 
+}
+
+function createTgWithCli()
+{
+    local file=/tmp/cli-create.tmp
+    > $file
+
+    echo configure >> $file
+    for (( i=0; i<$tgTestCount; i++)); do
+            echo "set addressContext default zone defaultSigZone sipTrunkGroup TEST_TG_$i media mediaIpInterfaceGroupName TEST_LIG_1"  >> $file
+            
+            if [[ $(( (i+1) % 2 )) -eq 0 ]]; then
+                echo commit >> $file
+            fi
+		set +x
+    done;
+    echo commit >> $file
+
+    cp $file /home/sftproot/Administrator/admin/ 
+    chmod 777 /home/sftproot/Administrator/admin/$(basename $file)
+
+    cd  /home/sftproot/Administrator/admin/
+    (echo source $(basename $file)) | /opt/sonus/sbx/tailf/bin/confd_cli -u admin 
+}
+
+function disableTgWithCli()
+{
+    out=$( (echo show configuration addressContext default zone defaultSigZone sipTrunkGroup TEST_TG_0 ) | /opt/sonus/sbx/tailf/bin/confd_cli -u admin)
+
+    UD=0
+    echo "$out" | grep "state.*enabled" && UD=1
+    echo "$out" | grep "mode.*inService" && UD=1
+
+    if [[ $UD -eq 1 ]]; then
+        local file=/tmp/cli-disable.tmp
+        > $file
+
+        echo configure >> $file
+        for (( i=0; i<$tgTestCount; i++)); do
+                echo "set addressContext default zone defaultSigZone sipTrunkGroup TEST_TG_$i state disabled mode outOfService"  >> $file
+                
+                if [[ $(( (i+1) % 5 )) -eq 0 ]]; then
+                    echo commit >> $file
+                fi
+            set +x
+        done;
+        echo commit >> $file
+
+        cp $file /home/sftproot/Administrator/admin/ 
+        chmod 777 /home/sftproot/Administrator/admin/$(basename $file)
+
+        cd  /home/sftproot/Administrator/admin/
+        (echo source $(basename $file)) | /opt/sonus/sbx/tailf/bin/confd_cli -u admin 
+    fi
+}
+
+function deleteTgWithCli()
+{
+    local file=/tmp/cli-delete.tmp
+    > $file
+
+    echo configure >> $file
+    for (( i=0; i<$tgTestCount; i++)); do
+            echo "delete addressContext default zone defaultSigZone sipTrunkGroup TEST_TG_$i"  >> $file
+            
+            if [[ $(( (i+1) % 3 )) -eq 0 ]]; then
+                echo commit >> $file
+            fi
+		set +x
+    done;
+    echo commit >> $file
+
+    cp $file /home/sftproot/Administrator/admin/ 
+    chmod 777 /home/sftproot/Administrator/admin/$(basename $file)
+
+    cd  /home/sftproot/Administrator/admin/
+    (echo source $(basename $file)) | /opt/sonus/sbx/tailf/bin/confd_cli -u admin 
+}
 
 function sbx_config_perf_test()
 {
@@ -135,11 +242,19 @@ function sbx_config_perf_test()
         return;
     fi
 
-    OUT=$(curl -kifsu "$user:$password" "https://localhost/api")
+    OUT=$(curl -kisu "$user:$password" "https://localhost/api")
+
+    if [[ $? -ne 0 ]];  then
+        echo "$OUT"
+        echo "error: unable to connect to REST API interface."
+        exit 1;
+    fi
+
+    echo "$OUT" | grep -q "HTTP/1.1 200 OK" 
 
     if [[ $? -ne 0 ]]; then
-        echo "Unable to connect to REST API interface."
         echo "$OUT"
+        echo "error: curl failed. Check credentials and max sesssions opened."
         exit 1;
     fi
 
@@ -152,22 +267,25 @@ function sbx_config_perf_test()
     </ipInterfaceGroup>
     ")
 
-
     start=$(date +%s)
 
-    for (( i=0; i<$tgTestCount; i++)); do
-        OUT=$(curl $CURLOPT -ksu "$user:$password" -XPOST  -H 'Content-Type: application/vnd.yang.data+xml'  https://localhost/api/config/addressContext/default/zone/defaultSigZone -d "
-        <sipTrunkGroup>
-             <name>TEST_TG_$i</name>
-                 <state>disabled</state>
-             <media>
-             <mediaIpInterfaceGroupName>TEST_LIG_1</mediaIpInterfaceGroupName>
-             </media>
-        </sipTrunkGroup>
-        ")
+    if [[ -z $tgUpdateFile ]] || [[ -z $tgUpdateCount ]] ; then
+        for (( i=0; i<$tgTestCount; i++)); do
+            OUT=$(curl $CURLOPT -ksu "$user:$password" -XPOST  -H 'Content-Type: application/vnd.yang.data+xml'  https://localhost/api/config/addressContext/default/zone/defaultSigZone -d "
+            <sipTrunkGroup>
+                 <name>TEST_TG_$i</name>
+                     <state>disabled</state>
+                 <media>
+                 <mediaIpInterfaceGroupName>TEST_LIG_1</mediaIpInterfaceGroupName>
+                 </media>
+            </sipTrunkGroup>
+            ")
 
-        isSuccess "$OUT"
-    done;
+            isSuccess "$OUT"
+        done;
+    else
+        createTgWithCli
+    fi
 
     stop=$(date +%s)
     TG_CREATE_TIME=$((stop-start))
@@ -176,28 +294,44 @@ function sbx_config_perf_test()
 
     start=$(date +%s)
 
-    for (( i=0; i<$tgTestCount; i++)); do
-        OUT=$(curl $CURLOPT -ksu "$user:$password" -XPATCH  -H 'Content-Type: application/vnd.yang.data+xml'  https://localhost/api/config/addressContext/default/zone/defaultSigZone/sipTrunkGroup/TEST_TG_$i  -d "
-        <sipTrunkGroup>
-             <name>TEST_TG_$i</name>
-             <sipResponseCodeStats>enabled</sipResponseCodeStats>
-        </sipTrunkGroup>
-        ")
+    if [[ -z $tgUpdateFile ]] || [[ -z $tgUpdateCount ]] ; then
 
-        isSuccess "$OUT"
-    done;
+	    for (( i=0; i<$tgTestCount; i++)); do
+		OUT=$(curl $CURLOPT -ksu "$user:$password" -XPATCH  -H 'Content-Type: application/vnd.yang.data+xml'  https://localhost/api/config/addressContext/default/zone/defaultSigZone/sipTrunkGroup/TEST_TG_$i  -d "
+		<sipTrunkGroup>
+		     <name>TEST_TG_$i</name>
+		     <sipResponseCodeStats>enabled</sipResponseCodeStats>
+		</sipTrunkGroup>
+		")
+
+		isSuccess "$OUT"
+	    done;
+    else
+        updateTgWithCli	
+    fi
 
     stop=$(date +%s)
     TG_UPDATE_TIME=$((stop-start))
 
     #------------------------------------------------------------------------------------------------------------------------#
+    if [[ -z $tgUpdateFile ]] || [[ -z $tgUpdateCount ]] ; then
+        true;
+    else
+        # Disable support only on CLI now
+        disableTgWithCli
+    fi
+    #------------------------------------------------------------------------------------------------------------------------#
 
     start=$(date +%s)
 
-    for (( i=0; i<$tgTestCount; i++)); do
-        OUT=$(curl $CURLOPT -ksu "$user:$password" -XDELETE  https://localhost/api/config/addressContext/default/zone/defaultSigZone/sipTrunkGroup/TEST_TG_$i)
-        isSuccess "$OUT"
-    done;
+    if [[ -z $tgUpdateFile ]] || [[ -z $tgUpdateCount ]] ; then
+        for (( i=0; i<$tgTestCount; i++)); do
+            OUT=$(curl $CURLOPT -ksu "$user:$password" -XDELETE  https://localhost/api/config/addressContext/default/zone/defaultSigZone/sipTrunkGroup/TEST_TG_$i)
+            isSuccess "$OUT"
+        done;
+    else
+        deleteTgWithCli
+    fi
 
     stop=$(date +%s)
     TG_DEL_TIME=$((stop-start))
@@ -275,7 +409,7 @@ function main()
 
     steal_check                                 
 
-    disk_perf_test                              
+    #disk_perf_test                              
 
     fetch_sbx_start_time                        
 
