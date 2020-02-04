@@ -10,7 +10,12 @@ location="RibbonLab"
 
 function printUsage()
 {
-    echo "usage: perf-test.sh -u user -p password -c count [ -s cpu_steal_threshold ] [ -l logfile ] [ -d ]"
+    echo "usage: perf-test.sh -u user -p password -c count [ -s cpu_steal_threshold ] [ -l logfile ] [ -d ] [ --tgUpdateFile clifile ] [ --tgUpdateCount count ] [ -D ] "
+    echo "       --tgUpdateFile : sample cli configuration file for a SINGLE trunkgroup"
+    echo "       --tgUpdateCount: number for trunkgroups to be commited together in update test"
+    echo "       -D : disable disk check"
+
+    echo "example: ./perf-test.sh --tgUpdateFile=/root/sampletg.cli --tgUpdateCount=50 -c 100 -u mikeehrmantraut -p callsaul"
 }
 
 function printSeparator()
@@ -20,10 +25,10 @@ function printSeparator()
 
 function parseCmdlineArgs()
 {
-
+    disableDiskCheck=0
     stealThreshold=3
     tgTestCount=0
-    options=$(getopt -o "du:p:c:s:l:" -l "tgUpdateFile:,tgUpdateCount:" -- "$@")
+    options=$(getopt -o "Ddu:p:c:s:l:" -l "tgUpdateFile:,tgUpdateCount:" -- "$@")
 
     if [ $? -ne 0 ]; then  
         printUsage
@@ -66,6 +71,9 @@ function parseCmdlineArgs()
                 debug=1
                 set -x
                 CURLOPT=${CURLOPT}i
+                ;;
+            -D)
+                disableDiskCheck=1
                 ;;
             --)
                 shift
@@ -409,7 +417,9 @@ function main()
 
     steal_check                                 
 
-    #disk_perf_test                              
+    if [[ $disableDiskCheck -eq 0 ]]; then
+        disk_perf_test                              
+    fi
 
     fetch_sbx_start_time                        
 
